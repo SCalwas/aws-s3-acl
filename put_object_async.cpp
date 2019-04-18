@@ -72,9 +72,11 @@ void put_object_async_finished(const Aws::S3::S3Client* client,
     }
 
     // Update global flag and notify waiting function
+#if 0
     std::unique_lock<std::mutex> lock(upload_mutex);
     upload_finished = true;
     lock.unlock();
+#endif
     upload_variable.notify_one();
 }
 // snippet-end:[s3.cpp.put_object_async_finished.code]
@@ -119,7 +121,15 @@ bool put_s3_object_async(const Aws::String& s3_bucket_name,
     s3_client.PutObjectAsync(object_request, 
                              put_object_async_finished,
                              context);
+#if 0
+	// This works, but how to return to main() and execute the wait or other operations there?
+	// Wait for upload to finish
+	std::cout << "Waiting for file upload to complete..." << std::endl;
+	std::unique_lock<std::mutex> lock(upload_mutex);
+	upload_variable.wait(lock);
+#endif
     return true;
+	// Exception thrown after function exits and before returning to main()
     // snippet-end:[s3.cpp.put_object_async.code]
 }
 
@@ -134,17 +144,21 @@ int main(int argc, char** argv)
     {
         // Assign these values before running the program
         const Aws::String bucket_name = "bucket-name-scalwas";
-        const Aws::String object_name = "xyplorer_full.zip";
-        const std::string file_name = "\\EraseMe\\xyplorer_full.zip";
+        const Aws::String object_name = "python-3.7.3-amd64.exe";
+		const std::string file_name = "\\EraseMe\\python-3.7.3-amd64.exe";
         const Aws::String region = "";      // Optional
 
         // Put the file into the S3 bucket
+#if 0
         std::unique_lock<std::mutex> lock(upload_mutex);
         upload_finished = false;
+#endif
         if (put_s3_object_async(bucket_name, object_name, file_name, region)) {
             // Wait for upload to finish
             std::cout << "Waiting for file upload to complete..." << std::endl;
-            upload_variable.wait(lock, []{return upload_finished;});
+			std::unique_lock<std::mutex> lock(upload_mutex);
+			upload_variable.wait(lock);
+            // upload_variable.wait(lock, []{return upload_finished;});
 #if 0
             // Temporarily remove mutex/condition_variable; sleep instead
             upload_finished = true;
@@ -155,6 +169,10 @@ int main(int argc, char** argv)
             std::cout << "File upload completed" << std::endl;
             // We can terminate the program now
         }
+#if 0
+		put_s3_object_async(bucket_name, object_name, file_name, region);
+		std::cout << "File upload completed" << std::endl;
+#endif
     }
     Aws::ShutdownAPI(options);
 }
